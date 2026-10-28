@@ -1,0 +1,55 @@
+# Festeryga Law, spatial refinement preview (client design review, Oct 29 2026).
+# Publishes a branch, tag or commit of MozwellStudios/festeryga-site (default spatial-refinement-oct27) to
+# https://mozwellstudios.github.io/festeryga-spatial-preview/ . Manual runs only. Version A and Option B are never touched.
+name: Deploy spatial preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit of festeryga-site to publish"
+        default: spatial-refinement-oct27
+        required: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out site source (read-only, public repo)
+        uses: actions/checkout@v4
+        with:
+          repository: MozwellStudios/festeryga-site
+          ref: ${{ inputs.ref }}
+          path: site
+
+      - name: Prepare preview output
+        run: |
+          set -e
+          cd site
+          echo "Publishing $(git rev-parse HEAD)"
+          rm -rf .git .github prototypes
+          find . -type d -name option-b -prune -exec rm -rf {} +
+          printf '# Festeryga Law, spatial refinement preview (review only, not for indexing)\nUser-agent: *\nDisallow: /\n' > robots.txt
+          missing=$(grep -L 'name="robots" content="noindex' $(find . -name '*.html') || true)
+          if [ -n "$missing" ]; then echo "Pages without noindex:"; echo "$missing"; exit 1; fi
+          if find . -type f \( -name '*.py' -o -name '*.mjs' -o -name '*.sh' -o -name '*.md' -o -name '*.zip' -o -name '*.gz' -o -name '.env*' \) | grep -q .; then echo "Non-site files present"; exit 1; fi
+          touch .nojekyll
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
